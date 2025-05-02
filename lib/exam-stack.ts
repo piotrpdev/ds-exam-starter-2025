@@ -133,6 +133,11 @@ export class ExamStack extends cdk.Stack {
     topic1.addSubscription(
       new subs.SqsSubscription(queueA, {
         rawMessageDelivery: true,
+        filterPolicy: {
+          country: sns.SubscriptionFilter.stringFilter({
+              allowlist: ['Ireland','China']
+          }),
+        },
       })
     );
 
