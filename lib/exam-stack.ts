@@ -13,6 +13,7 @@ import * as events from "aws-cdk-lib/aws-lambda-event-sources";
 import * as sns from "aws-cdk-lib/aws-sns";
 import * as sqs from "aws-cdk-lib/aws-sqs";
 import * as subs from "aws-cdk-lib/aws-sns-subscriptions";
+import { SqsEventSource } from "aws-cdk-lib/aws-lambda-event-sources";
 
 export class ExamStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
@@ -100,6 +101,10 @@ export class ExamStack extends cdk.Stack {
     });
 
     const queueA = new sqs.Queue(this, "queueA", {
+      deadLetterQueue: {
+        queue: queueB,
+        maxReceiveCount: 1,
+      },
       receiveMessageWaitTime: cdk.Duration.seconds(5),
     });
     
@@ -124,7 +129,16 @@ export class ExamStack extends cdk.Stack {
         REGION: "eu-west-1",
       },
     });
-    
+
+    topic1.addSubscription(
+      new subs.SqsSubscription(queueA, {
+        rawMessageDelivery: true,
+      })
+    );
+
+    lambdaXFn.addEventSource(
+      new SqsEventSource(queueA)
+    );
   }
 }
   
