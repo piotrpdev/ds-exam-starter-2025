@@ -1,7 +1,7 @@
 import { APIGatewayProxyHandlerV2 } from "aws-lambda";
 
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
-import { DynamoDBDocumentClient, DeleteCommand, GetCommand } from "@aws-sdk/lib-dynamodb";
+import { DynamoDBDocumentClient, DeleteCommand, GetCommand, ScanCommand } from "@aws-sdk/lib-dynamodb";
 
 const client = createDDbDocClient();
 
@@ -11,6 +11,10 @@ export const handler: APIGatewayProxyHandlerV2 = async (event, context) => {
     const pathParameters  = event?.pathParameters;
     const role = pathParameters?.role ? pathParameters.role : undefined;
     const movieId = pathParameters?.movieId ? parseInt(pathParameters.movieId) : undefined;
+    const queryParams = event.queryStringParameters;
+    const verbose = queryParams?.verbose ? (queryParams?.verbose === "true" ? true : false) : undefined
+
+    console.log("Params: ", {role, movieId, verbose});
 
     if (typeof role === 'undefined' || typeof movieId === 'undefined') {
       return {
@@ -22,22 +26,49 @@ export const handler: APIGatewayProxyHandlerV2 = async (event, context) => {
       };
     }
 
-    const commandOutput = await client.send(
-      new GetCommand({
-        TableName: process.env.TABLE_NAME,
-        Key: { movieId, role },
-      })
-    );
-    console.log("GetCommand response: ", commandOutput);
+    let commandOutput;
 
-    if (!commandOutput.Item) {
-      return {
-        statusCode: 404,
-        headers: {
-          "content-type": "application/json",
-        },
-        body: JSON.stringify({ Message: "Row not found" }),
-      };
+    if (verbose === true) {
+      commandOutput = await client.send(
+        new ScanCommand({
+          TableName: process.env.TABLE_NAME,
+          FilterExpression: "movieId = :a",
+          ExpressionAttributeValues: {
+            ":a": movieId,
+          },
+        })
+      );
+
+      console.log("GetCommand response: ", commandOutput);
+
+      if (!commandOutput.Items) {
+        return {
+          statusCode: 404,
+          headers: {
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({ Message: "Rows not found" }),
+        };
+      }
+    } else {
+      commandOutput = await client.send(
+        new GetCommand({
+          TableName: process.env.TABLE_NAME,
+          Key: { movieId, role },
+        })
+      );
+
+      console.log("GetCommand response: ", commandOutput);
+
+      if (!commandOutput.Item) {
+        return {
+          statusCode: 404,
+          headers: {
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({ Message: "Row not found" }),
+        };
+      }
     }
 
     return {
@@ -45,7 +76,7 @@ export const handler: APIGatewayProxyHandlerV2 = async (event, context) => {
       headers: {
         "content-type": "application/json",
       },
-      body: JSON.stringify(commandOutput.Item),
+      body: JSON.stringify(commandOutput.Item || commandOutput.Items),
     };
   } catch (error: any) {
     console.log(JSON.stringify(error));
